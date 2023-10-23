@@ -72,3 +72,11 @@ add_library(cxxnetaddr OBJECT NetworkAddress.cpp NetworkAddress.hpp NetworkInter
 target_compile_definitions(cxxnetaddr PRIVATE)
 target_include_directories(cxxnetaddr PRIVATE)
 target_link_libraries(cxxnetaddr PRIVATE)
+
+# Testing
+enable_testing()
+find_package(GTest REQUIRED)
+
+add_executable(cxxnetaddr_test NetworkAddress_test.cpp NetworkInterface_test.cpp)
+target_link_libraries(cxxnetaddr_test PRIVATE cxxnetaddr GTest::gtest_main)
+gtest_discover_tests(cxxnetaddr_test)
