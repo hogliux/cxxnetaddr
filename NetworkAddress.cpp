@@ -142,9 +142,9 @@ struct IPSocketImpl : SocketMethods<family, shouldCopyBack>
     std::string toString() const {
         char host[256];
         char service[8];
-        auto const& sock = Base::sock;
+        auto const& sck = Base::sock;
 
-        auto status = ::getnameinfo(reinterpret_cast<::sockaddr const*>(&sock),
+        auto status = ::getnameinfo(reinterpret_cast<::sockaddr const*>(&sck),
                                     socketLength(),
                                     host, sizeof(host), service, sizeof(service), NI_NUMERICHOST | NI_NUMERICSERV);
         
