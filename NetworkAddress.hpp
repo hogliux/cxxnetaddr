@@ -208,6 +208,13 @@ public:
     Family family() const;
 
     /**
+     * @brief Gets the address' posix family
+     *  
+     * @return The an sa_family_t representing the address family. 
+     */
+    sa_family_t posixFamily() const;
+
+    /**
      * @brief Converts the NetworkAddress to a string representation.
      *
      * @return The string representation of the address.

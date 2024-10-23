@@ -428,6 +428,7 @@ NetworkAddress NetworkAddress::fromUNIXSocketPath(std::string const& path) { ret
 NetworkAddress NetworkAddress::fromPOSIXSocketAddress(::sockaddr const& addr, ::socklen_t len) { return NetworkAddress(addr, len); }
 bool NetworkAddress::valid() const                                { return family() != Family::unspecified; }
 NetworkAddress::Family NetworkAddress::family() const             { return unix2addr(storage.ss_family); }
+sa_family_t NetworkAddress::posixFamily() const                   { return family() != Family::unspecified ? storage.ss_family : AF_UNSPEC; }
 std::string NetworkAddress::toString() const                      { return *sockcall(storage, [] (auto s) { return s.toString(); }); }
 ::sockaddr const& NetworkAddress::socket() const                  { return *reinterpret_cast<::sockaddr const*>(&storage); }
 ::socklen_t NetworkAddress::socketLength() const                  { return *sockcall(storage, [] (auto s) { return s.socketLength(); }); }
