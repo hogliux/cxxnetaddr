@@ -16,6 +16,8 @@
 #include <cmath>
 #include <memory>
 #include <functional>
+#include <mutex>
+#include <type_traits>
 
 namespace cxxutils {
 namespace detail {
@@ -145,6 +147,64 @@ bit_cast(const U& src) noexcept
     To dst;
     std::memcpy(&dst, &src, sizeof(T));
     return dst;
+   #endif
+}
+
+//====================================================================
+// Inspired by boosts reverse-lock but also works with STL std::unique_lock
+template <typename M>
+class reverse_lock
+{
+public:
+    explicit reverse_lock(std::unique_lock<M>& _lock) : lock(_lock) {
+        if (lock.owns_lock()) {
+            lock.unlock();
+            unlocked = true;
+        }
+    }
+
+    reverse_lock(const reverse_lock&) = delete;
+    reverse_lock& operator=(const reverse_lock&) = delete;
+    reverse_lock(reverse_lock&& other) noexcept : lock(other.lock), unlocked(other.unlocked) { other.unlocked_= false; }
+
+    reverse_lock& operator=(reverse_lock&& other) noexcept
+    {
+        if (this != &other) {
+            if (unlocked) {
+                lock.lock(); // Re-lock if currently unlocked
+                unlocked = false;
+            }
+            lock = other.lock;
+            std::swap(unlocked, other.unlocked);
+        }
+        return *this;
+    }
+
+    ~reverse_lock() {
+        if (unlocked) {
+            lock.lock();
+        }
+    }
+
+private:
+    std::unique_lock<M>& lock;
+    bool unlocked = false;
+};
+
+//====================================================================
+template<typename T>
+constexpr std::enable_if_t<std::is_integral_v<T>, T> byteswap(T value) noexcept {
+   #if defined(__cpp_lib_byteswap) && __cplusplus >= __cpp_lib_byteswap
+    return std::byteswap<T>(src);
+   #else
+    static_assert(std::has_unique_object_representations_v<T>,  "T may not have padding bits");
+    auto byte_representation = std::bit_cast<std::array<std::byte, sizeof(T)>>(value);
+    auto const reverse_byte_representation = std::invoke([&byte_representation] () {
+        std::array<std::byte, sizeof(T)> result;
+        std::copy(byte_representation.rbegin(), byte_representation.rend(), result.begin());
+        return result;
+    });
+    return std::bit_cast<T>(reverse_byte_representation);
    #endif
 }
 }
