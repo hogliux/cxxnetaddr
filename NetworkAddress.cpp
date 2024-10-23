@@ -184,7 +184,7 @@ struct SocketImpl<NetworkAddress::Family::ipv4, shouldCopyBack> : IPSocketImpl<N
 
     void init(std::uint32_t saddr, std::uint16_t port) noexcept {
         Base::sock.sin_addr.s_addr = saddr;
-        Base::sock.sin_port = ::htons(port);
+        Base::sock.sin_port = cxxutils::byteswap(port);
     }
 
     void init(std::uint8_t o1, std::uint8_t o2, std::uint8_t o3, std::uint8_t o4,
@@ -193,12 +193,12 @@ struct SocketImpl<NetworkAddress::Family::ipv4, shouldCopyBack> : IPSocketImpl<N
     }
     
     std::string toString() const                                { return IPSocketImpl<NetworkAddress::Family::ipv4, shouldCopyBack>::toString(); }
-    bool isMulticast() const noexcept                           { return (::ntohl(Base::sock.sin_addr.s_addr) & 0xf0000000u) == 0xe0000000u; }
+    bool isMulticast() const noexcept                           { return (cxxutils::byteswap(Base::sock.sin_addr.s_addr) & 0xf0000000u) == 0xe0000000u; }
     void setInterface(NetworkInterface const&) noexcept         {}
     std::optional<NetworkInterface> interface() const noexcept  { return {}; }
-    bool isLinkLocal() const noexcept                           { return (::ntohl(Base::sock.sin_addr.s_addr) & 0xffff0000u) == 0xa9fe0000u; }
-    std::uint16_t port() const noexcept                         { return ::ntohs(Base::sock.sin_port); }
-    void setPort(std::uint16_t p) noexcept                      { Base::sock.sin_port = ::htons(p); }
+    bool isLinkLocal() const noexcept                           { return (cxxutils::byteswap(Base::sock.sin_addr.s_addr) & 0xffff0000u) == 0xa9fe0000u; }
+    std::uint16_t port() const noexcept                         { return cxxutils::byteswap(Base::sock.sin_port); }
+    void setPort(std::uint16_t p) noexcept                      { Base::sock.sin_port = cxxutils::byteswap(p); }
     ::in_addr get_sin_addr() const noexcept                     { return Base::sock.sin_addr; }
 };
 
@@ -219,9 +219,9 @@ struct SocketImpl<NetworkAddress::Family::ipv6, shouldCopyBack> : IPSocketImpl<N
             return result;
         });
 
-        std::transform(words.begin(), words.end(), words.begin(), [] (auto x) { return ::htons(x); });
+        std::transform(words.begin(), words.end(), words.begin(), [] (auto x) { return cxxutils::byteswap(x); });
         std::memcpy(&Base::sock.sin6_addr.s6_addr, words.data(),  words.size() * sizeof(std::uint16_t));
-        Base::sock.sin6_port = ::htons(port);
+        Base::sock.sin6_port = cxxutils::byteswap(port);
         Base::sock.sin6_scope_id = intf.getIndex();
     }
 
@@ -236,8 +236,8 @@ struct SocketImpl<NetworkAddress::Family::ipv6, shouldCopyBack> : IPSocketImpl<N
     void setInterface(NetworkInterface const& intf) noexcept   { Base::sock.sin6_scope_id = intf.getIndex(); }
     std::optional<NetworkInterface> interface() const noexcept { return NetworkInterface::fromIntfIndex(Base::sock.sin6_scope_id); }
     bool isLinkLocal() const noexcept                          { return (Base::sock.sin6_addr.s6_addr[0] == 0xfe) && (Base::sock.sin6_addr.s6_addr[1] == 0x80); }
-    std::uint16_t port() const noexcept                        { return ::ntohs(Base::sock.sin6_port); }
-    void setPort(std::uint16_t p) noexcept                     { Base::sock.sin6_port = ::htons(p); }
+    std::uint16_t port() const noexcept                        { return cxxutils::byteswap(Base::sock.sin6_port); }
+    void setPort(std::uint16_t p) noexcept                     { Base::sock.sin6_port = cxxutils::byteswap(p); }
     ::in6_addr get_sin6_addr() const noexcept                  { return Base::sock.sin6_addr; }
 };
 
@@ -252,7 +252,7 @@ struct SocketImpl<NetworkAddress::Family::ethernet, shouldCopyBack> : SocketMeth
     void init(std::span<std::uint8_t const, 6u> mac, std::uint16_t protocol, NetworkInterface const& intf) noexcept {
         static_assert(mac.size() <= sizeof(Base::sock.sll_addr));
         std::memcpy(Base::sock.sll_addr, mac.data(), mac.size());
-        Base::sock.sll_protocol = ::htons(protocol);
+        Base::sock.sll_protocol = cxxutils::byteswap(protocol);
         Base::sock.sll_ifindex = intf.getIndex();
         Base::sock.sll_halen = mac.size();
     }
@@ -268,8 +268,8 @@ struct SocketImpl<NetworkAddress::Family::ethernet, shouldCopyBack> : SocketMeth
     void setInterface(NetworkInterface const& intf) noexcept   { Base::sock.sll_ifindex = intf.getIndex(); }
     std::optional<NetworkInterface> interface() const noexcept { return NetworkInterface::fromIntfIndex(Base::sock.sll_ifindex); }
     bool isLinkLocal() const noexcept                          { return true; }
-    std::uint16_t protocol() const noexcept                    { return ::ntohs(Base::sock.sll_protocol); }
-    void setProtocol(std::uint16_t p) noexcept                 { Base::sock.sll_protocol = ::htons(p); }
+    std::uint16_t protocol() const noexcept                    { return cxxutils::byteswap(Base::sock.sll_protocol); }
+    void setProtocol(std::uint16_t p) noexcept                 { Base::sock.sll_protocol = cxxutils::byteswap(p); }
     std::string toString() const {
         std::ostringstream ss;
 
@@ -328,7 +328,7 @@ NetworkAddress::NetworkAddress(std::uint8_t o1, std::uint8_t o2, std::uint8_t o3
     SocketImpl<NetworkAddress::Family::ipv4>(storage).init(o1, o2, o3, o4, port);
 }
 NetworkAddress::NetworkAddress(std::uint32_t saddr, std::uint16_t port) : storage { .ss_family = AF_INET } {
-    SocketImpl<NetworkAddress::Family::ipv4>(storage).init(::htonl(saddr), port);
+    SocketImpl<NetworkAddress::Family::ipv4>(storage).init(cxxutils::byteswap(saddr), port);
 }
 #if __cplusplus >= 202002L
 NetworkAddress::NetworkAddress(std::span<std::uint8_t const, 4u> ipv4, std::uint16_t port) : storage { .ss_family = AF_INET } {
