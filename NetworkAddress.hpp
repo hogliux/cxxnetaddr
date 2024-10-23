@@ -21,6 +21,7 @@
 #endif
 
 #include <sys/socket.h>
+#include <netinet/ip.h>
 
 class NetworkInterface;
 
@@ -292,6 +293,24 @@ public:
      * @return A new NetworkAddress with the port.
      */
     NetworkAddress withPort(std::uint16_t port) const;
+
+    //===============================================================
+    /** Methods applicable to only IPv4 addresses */
+
+    /**
+     * @brief Gets the sin_addr field of sockaddr_in
+     * @return The sin_addr field of sockaddr_in
+     */
+    struct ::in_addr get_sin_addr() const;
+
+    //===============================================================
+    /** Methods applicable to IPv6 addresses */
+
+    /**
+     * @brief Gets the sin6_addr field of sockaddr_in6
+     * @return The sin6_addr field of sockaddr_in6
+     */
+    struct ::in6_addr get_sin6_addr() const;
 
     //===============================================================
     /** Methods applicable to MAC addresses */

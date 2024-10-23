@@ -113,6 +113,8 @@ struct SocketMethods {
     void setInterface(NetworkInterface const&) { assertWrongFamilyType(); }
     void setPort(std::uint16_t)                { assertWrongFamilyType(); }
     void setProtocol(std::uint16_t)            { assertWrongFamilyType(); }
+    ::in_addr get_sin_addr() const             { assertWrongFamilyType(); return {}; }
+    ::in6_addr get_sin6_addr() const           { assertWrongFamilyType(); return {}; }
 
 
     auto _this()       { return static_cast<Child*>      (this); }
@@ -197,6 +199,7 @@ struct SocketImpl<NetworkAddress::Family::ipv4, shouldCopyBack> : IPSocketImpl<N
     bool isLinkLocal() const noexcept                           { return (::ntohl(Base::sock.sin_addr.s_addr) & 0xffff0000u) == 0xa9fe0000u; }
     std::uint16_t port() const noexcept                         { return ::ntohs(Base::sock.sin_port); }
     void setPort(std::uint16_t p) noexcept                      { Base::sock.sin_port = ::htons(p); }
+    ::in_addr get_sin_addr() const noexcept                     { return Base::sock.sin_addr; }
 };
 
 //===============================================================
@@ -235,6 +238,7 @@ struct SocketImpl<NetworkAddress::Family::ipv6, shouldCopyBack> : IPSocketImpl<N
     bool isLinkLocal() const noexcept                          { return (Base::sock.sin6_addr.s6_addr[0] == 0xfe) && (Base::sock.sin6_addr.s6_addr[1] == 0x80); }
     std::uint16_t port() const noexcept                        { return ::ntohs(Base::sock.sin6_port); }
     void setPort(std::uint16_t p) noexcept                     { Base::sock.sin6_port = ::htons(p); }
+    ::in6_addr get_sin6_addr() const noexcept                  { return Base::sock.sin6_addr; }
 };
 
 //===============================================================
@@ -432,6 +436,8 @@ std::optional<NetworkInterface> NetworkAddress::interface() const { return  sock
 bool NetworkAddress::isLinkLocal() const                          { return *sockcall(storage, [] (auto s) { return s.isLinkLocal(); }); }
 std::uint16_t NetworkAddress::port() const                        { return *sockcall(storage, [] (auto s) { return s.port(); }); }
 std::uint16_t NetworkAddress::protocol() const                    { return *sockcall(storage, [] (auto s) { return s.protocol(); }); }
+struct ::in_addr NetworkAddress::get_sin_addr() const             { return *sockcall(storage, [] (auto s) { return s.get_sin_addr(); }); }
+struct ::in6_addr NetworkAddress::get_sin6_addr() const           { return *sockcall(storage, [] (auto s) { return s.get_sin6_addr(); }); }
 
 NetworkAddress NetworkAddress::withInterface(NetworkInterface const& intf) const { 
     NetworkAddress result(*this);
