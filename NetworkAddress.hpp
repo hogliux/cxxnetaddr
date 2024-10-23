@@ -323,6 +323,7 @@ public:
     NetworkAddress(NetworkAddress const&);
     NetworkAddress(NetworkAddress&&);
     NetworkAddress& operator=(NetworkAddress&&);
+    NetworkAddress& operator=(NetworkAddress const&);
 
     bool operator==(NetworkAddress const& other) const;
     bool operator!=(NetworkAddress const& other) const;

@@ -385,6 +385,11 @@ NetworkAddress& NetworkAddress::operator=(NetworkAddress && o) {
     return *this;
 }
 
+NetworkAddress& NetworkAddress::operator=(NetworkAddress const& o) {
+    std::memcpy(&storage, &o.socket(), o.socketLength());
+    return *this;
+}
+
 int NetworkAddress::cmp(NetworkAddress const& o) const {
     auto const len1 = static_cast<int>(*sockcall(  storage, [] (auto s) { return s.socketLength(); }));
     auto const len2 = static_cast<int>(*sockcall(o.storage, [] (auto s) { return s.socketLength(); }));
