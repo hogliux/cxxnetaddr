@@ -424,7 +424,9 @@ bool NetworkAddress::operator<=(NetworkAddress const& o) const { return cmp(o) <
 bool NetworkAddress::operator>=(NetworkAddress const& o) const { return cmp(o) >= 0; }
 #endif
 
-NetworkAddress NetworkAddress::fromUNIXSocketPath(std::string const& path) { return NetworkAddress(path); }
+::sa_family_t NetworkAddress::family2POSIX(Family family) noexcept                             { return addr2unix(family); }
+NetworkAddress::Family NetworkAddress::POSIX2Family(::sa_family_t family) noexcept             { return unix2addr(family); }
+NetworkAddress NetworkAddress::fromUNIXSocketPath(std::string const& path)                     { return NetworkAddress(path); }
 NetworkAddress NetworkAddress::fromPOSIXSocketAddress(::sockaddr const& addr, ::socklen_t len) { return NetworkAddress(addr, len); }
 bool NetworkAddress::valid() const                                { return family() != Family::unspecified; }
 NetworkAddress::Family NetworkAddress::family() const             { return unix2addr(storage.ss_family); }

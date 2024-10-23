@@ -50,6 +50,16 @@ public:
         unspecified    /**< Unspecified address family */
     };
 
+    /**
+     * @brief Convert family to a POSIX sa_family_t
+     */
+    static ::sa_family_t family2POSIX(Family family) noexcept;
+
+    /**
+     * @brief Convert family to a POSIX sa_family_t
+     */
+    static Family POSIX2Family(::sa_family_t family) noexcept;
+
     //===============================================================
     /**
      * @brief Default constructor.
