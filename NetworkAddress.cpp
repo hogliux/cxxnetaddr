@@ -22,7 +22,17 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
-#include <linux/if_packet.h>
+
+
+#if __APPLE__
+ #include <net/if_dl.h>
+ #include <net/if_types.h>
+ static constexpr ::sa_family_t kFamilyLinkLevel = AF_LINK;
+#elif __linux__
+ #include <linux/if_packet.h>
+ static constexpr ::sa_family_t kFamilyLinkLevel = AF_PACKET;
+#endif
+
 #include <net/ethernet.h>
 
 #include "CxxUtilities.hpp"
@@ -36,10 +46,10 @@ namespace
 // Convert between our family enum and UNIX's sa_family_t
 constexpr NetworkAddress::Family unix2addr(::sa_family_t family) noexcept {
     switch (family) {
-    case AF_UNIX:   return NetworkAddress::Family::unixSocket;
-    case AF_PACKET: return NetworkAddress::Family::ethernet;
-    case AF_INET:   return NetworkAddress::Family::ipv4;
-    case AF_INET6:  return NetworkAddress::Family::ipv6;
+    case AF_UNIX:          return NetworkAddress::Family::unixSocket;
+    case kFamilyLinkLevel: return NetworkAddress::Family::ethernet;
+    case AF_INET:          return NetworkAddress::Family::ipv4;
+    case AF_INET6:         return NetworkAddress::Family::ipv6;
     default: break;
     }
 
@@ -49,7 +59,7 @@ constexpr NetworkAddress::Family unix2addr(::sa_family_t family) noexcept {
 constexpr ::sa_family_t addr2unix(NetworkAddress::Family family) noexcept {
     switch (family) {
     case NetworkAddress::Family::unixSocket: return AF_UNIX;
-    case NetworkAddress::Family::ethernet:   return AF_PACKET;
+    case NetworkAddress::Family::ethernet:   return kFamilyLinkLevel;
     case NetworkAddress::Family::ipv4:       return AF_INET;
     case NetworkAddress::Family::ipv6:       return AF_INET6;
     default: break;
@@ -61,7 +71,11 @@ constexpr ::sa_family_t addr2unix(NetworkAddress::Family family) noexcept {
 template <NetworkAddress::Family family>
 constexpr auto family2type(std::integral_constant<NetworkAddress::Family, family>) {
     if constexpr (family == NetworkAddress::Family::unixSocket) return std::type_identity<sockaddr_un> ();
+   #if __APPLE__  
+    if constexpr (family == NetworkAddress::Family::ethernet)   return std::type_identity<sockaddr_dl> ();
+   #elif __linux__
     if constexpr (family == NetworkAddress::Family::ethernet)   return std::type_identity<sockaddr_ll> ();
+   #endif
     if constexpr (family == NetworkAddress::Family::ipv4)       return std::type_identity<sockaddr_in> ();
     if constexpr (family == NetworkAddress::Family::ipv6)       return std::type_identity<sockaddr_in6>();
 }
@@ -105,6 +119,7 @@ struct SocketMethods {
             std::memcpy(&storage, &sock, sizeof(Type));
     }
 
+    bool valid() const                         { return false; }
     bool isMulticast() const                   { assertWrongFamilyType(); return false; }
     bool isLinkLocal() const                   { assertWrongFamilyType(); return false; }
     NetworkInterface interface() const         { assertWrongFamilyType(); return {}; }
@@ -139,6 +154,7 @@ struct IPSocketImpl : SocketMethods<family, shouldCopyBack>
 
     IPSocketImpl(Base::RefType _storage) noexcept : Base(_storage) {}
 
+    bool valid() const noexcept { return true; }
     ::socklen_t socketLength() const noexcept { return static_cast<::socklen_t>(sizeof(typename Base::Type)); }
 
     std::string toString() const {
@@ -243,6 +259,49 @@ struct SocketImpl<NetworkAddress::Family::ipv6, shouldCopyBack> : IPSocketImpl<N
 
 //===============================================================
 // Link-level implementation of methods
+#if __APPLE__ 
+template <bool shouldCopyBack>
+struct SocketImpl<NetworkAddress::Family::ethernet, shouldCopyBack> : SocketMethods<NetworkAddress::Family::ethernet, shouldCopyBack> {
+    using Base = SocketMethods<NetworkAddress::Family::ethernet, shouldCopyBack>;
+
+    SocketImpl(Base::RefType _storage) noexcept : Base(_storage) {}
+
+    void init(std::span<std::uint8_t const, 6u> mac, std::uint16_t /*protocol*/, NetworkInterface const& intf) noexcept {
+        static_assert(mac.size() <= sizeof(Base::sock.sdl_data));
+        std::memcpy(Base::sock.sdl_data, mac.data(), mac.size());
+        Base::sock.sdl_type = IFT_ETHER;
+        Base::sock.sdl_index = intf.getIndex();
+        Base::sock.sdl_alen = mac.size();
+    }
+
+    void init(std::uint8_t o1, std::uint8_t o2, std::uint8_t o3,
+              std::uint8_t o4, std::uint8_t o5, std::uint8_t o6,
+              std::uint16_t protocol, NetworkInterface const& intf) noexcept {
+        init(std::array<std::uint8_t, 6>{{o1, o2, o3, o4, o5, o6}}, protocol, intf);
+    }
+
+    bool valid() const noexcept                                { return Base::sock.sdl_alen > 0; }
+    ::socklen_t socketLength() const                           { return sizeof(sockaddr_dl); }
+    bool isMulticast() const noexcept                          { typename Base::Type const& s = Base::sock; return (LLADDR(&s)[0] & 0x1) != 0; }
+    void setInterface(NetworkInterface const& intf) noexcept   { Base::sock.sdl_index = intf.getIndex(); }
+    std::optional<NetworkInterface> interface() const noexcept { return NetworkInterface::fromIntfIndex(Base::sock.sdl_index); }
+    bool isLinkLocal() const noexcept                          { return true; }
+    std::uint16_t protocol() const noexcept                    { return 0; }
+    void setProtocol(std::uint16_t) noexcept                   {}
+    std::string toString() const {
+        std::ostringstream ss;
+
+        typename Base::Type const& s = Base::sock;
+        auto const* mac = LLADDR(&s);
+
+        std::for_each(mac, mac + Base::sock.sdl_alen, [&ss] (char octet) {
+            ss << ':' << std::right << std::hex << std::uppercase << std::setfill('0') << std::setw(2) << static_cast<unsigned int>(static_cast<unsigned char>(octet));
+        });
+
+        return ss.str().empty() ? std::string() : ss.str().substr(1);
+    }
+};
+#elif __linux__
 template <bool shouldCopyBack>
 struct SocketImpl<NetworkAddress::Family::ethernet, shouldCopyBack> : SocketMethods<NetworkAddress::Family::ethernet, shouldCopyBack> {
     using Base = SocketMethods<NetworkAddress::Family::ethernet, shouldCopyBack>;
@@ -263,6 +322,7 @@ struct SocketImpl<NetworkAddress::Family::ethernet, shouldCopyBack> : SocketMeth
         init(std::array<std::uint8_t, 6>{{o1, o2, o3, o4, o5, o6}}, protocol, intf);
     }
 
+    bool valid() const noexcept                                { return true; }
     ::socklen_t socketLength() const                           { return sizeof(sockaddr_ll) - sizeof(std::declval<sockaddr_ll>().sll_addr) + Base::sock.sll_halen; }
     bool isMulticast() const noexcept                          { return (Base::sock.sll_addr[0] & 0x1) != 0; }
     void setInterface(NetworkInterface const& intf) noexcept   { Base::sock.sll_ifindex = intf.getIndex(); }
@@ -280,6 +340,7 @@ struct SocketImpl<NetworkAddress::Family::ethernet, shouldCopyBack> : SocketMeth
         return ss.str().substr(1);
     }
 };
+#endif
 
 //===============================================================
 // unix socket implementation of methods
@@ -296,6 +357,8 @@ struct SocketImpl<NetworkAddress::Family::unixSocket, shouldCopyBack> : SocketMe
         auto const len = std::min(path.size(), kMaxUnixPathLength);
         std::memcpy(Base::sock.sun_path, path.substr(0, len).c_str(), len + 1);
     }
+
+    bool valid() const                         { return true; }
 
     ::socklen_t socketLength() const {
         auto const len = offsetof(::sockaddr_un, sun_path) + ::strnlen(Base::sock.sun_path, sizeof(std::declval<::sockaddr_un>().sun_path)) + 1;
@@ -366,7 +429,7 @@ NetworkAddress::NetworkAddress(std::uint8_t o1, std::uint8_t o2, std::uint8_t o3
 NetworkAddress::NetworkAddress(std::uint8_t o1, std::uint8_t o2, std::uint8_t o3,
                                std::uint8_t o4, std::uint8_t o5, std::uint8_t o6,
                                std::uint16_t protocol, NetworkInterface const& intf)
-    : storage { .ss_family = AF_PACKET } {
+    : storage { .ss_family = kFamilyLinkLevel } {
     SocketImpl<NetworkAddress::Family::ethernet>(storage).init(o1, o2, o3, o4, o5, o6, protocol, intf);
 }
 #if __cplusplus >= 202002L
@@ -374,7 +437,7 @@ NetworkAddress::NetworkAddress(std::span<std::uint8_t const, 6u> mac, std::uint1
     : NetworkAddress(mac, protocol, {})
 {}
 NetworkAddress::NetworkAddress(std::span<std::uint8_t const, 6u> mac, std::uint16_t protocol, NetworkInterface const& intf)
-    : storage { .ss_family = AF_PACKET } {
+    : storage { .ss_family = kFamilyLinkLevel } {
     SocketImpl<NetworkAddress::Family::ethernet>(storage).init(mac, protocol, intf);
 }
 #endif
@@ -424,11 +487,23 @@ bool NetworkAddress::operator<=(NetworkAddress const& o) const { return cmp(o) <
 bool NetworkAddress::operator>=(NetworkAddress const& o) const { return cmp(o) >= 0; }
 #endif
 
+bool NetworkAddress::valid() const {
+    if (family() == Family::unspecified) {
+        return false;
+    }
+
+    if (auto isvalid = sockcall(storage, [] (auto s) { return s.valid(); }); isvalid.has_value()) {
+        return *isvalid;
+    }
+
+    return false;
+}
+
 ::sa_family_t NetworkAddress::family2POSIX(Family family) noexcept                             { return addr2unix(family); }
 NetworkAddress::Family NetworkAddress::POSIX2Family(::sa_family_t family) noexcept             { return unix2addr(family); }
 NetworkAddress NetworkAddress::fromUNIXSocketPath(std::string const& path)                     { return NetworkAddress(path); }
 NetworkAddress NetworkAddress::fromPOSIXSocketAddress(::sockaddr const& addr, ::socklen_t len) { return NetworkAddress(addr, len); }
-bool NetworkAddress::valid() const                                { return family() != Family::unspecified; }
+
 NetworkAddress::Family NetworkAddress::family() const             { return unix2addr(storage.ss_family); }
 sa_family_t NetworkAddress::posixFamily() const                   { return family() != Family::unspecified ? storage.ss_family : AF_UNSPEC; }
 std::string NetworkAddress::toString() const                      { return *sockcall(storage, [] (auto s) { return s.toString(); }); }
@@ -527,13 +602,15 @@ std::optional<NetworkAddress> NetworkAddress::fromMACString(std::string const& m
         return result;
     });
 
-    if (parts.size() != ETH_ALEN) {
+    static constexpr std::size_t kEthernetMACLen = 6;
+
+    if (parts.size() != kEthernetMACLen) {
         return {};
     }
 
 
-    std::array<std::uint8_t, ETH_ALEN> mac;
-    for (std::size_t i = 0; i < ETH_ALEN; ++i) {
+    std::array<std::uint8_t, kEthernetMACLen> mac;
+    for (std::size_t i = 0; i < kEthernetMACLen; ++i) {
         auto const& part = parts[i];
 
         if (part.empty() || part.size() > 2) {

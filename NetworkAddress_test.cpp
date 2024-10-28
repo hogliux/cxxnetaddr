@@ -72,10 +72,9 @@ TEST(NetworkAddressTest, IPv6LinkLocalAddress) {
 
 // Test creating a MAC address using octets
 TEST(NetworkAddressTest, MACAddressCreation) {
-    NetworkAddress addr(0x00, 0x1A, 0x2B, 0x3C, 0x4D, 0x5E, 0x0800);
+    NetworkAddress addr(0x00, 0x1A, 0x2B, 0x3C, 0x4D, 0x5E);
     EXPECT_TRUE(addr.valid());
     EXPECT_EQ(addr.family(), NetworkAddress::Family::ethernet);
-    EXPECT_EQ(addr.protocol(), 0x0800);
     EXPECT_EQ(addr.toString(), "00:1A:2B:3C:4D:5E");
 }
 
@@ -220,6 +219,7 @@ TEST(NetworkAddressTest, FromPOSIXSocketAddress) {
     EXPECT_EQ(addr.toString(), "192.168.1.1:8080");
 }
 
+#if __linux__
 // Test withProtocol method for MAC address
 TEST(NetworkAddressTest, MACAddressWithProtocol) {
     NetworkAddress addr(0x00, 0x1A, 0x2B, 0x3C, 0x4D, 0x5E);
@@ -227,6 +227,7 @@ TEST(NetworkAddressTest, MACAddressWithProtocol) {
     auto addrWithProtocol = addr.withProtocol(0x0806); // ARP protocol
     EXPECT_EQ(addrWithProtocol.protocol(), 0x0806);
 }
+#endif
 
 // Test withInterface method (without depending on actual interfaces)
 TEST(NetworkAddressTest, WithInterface) {

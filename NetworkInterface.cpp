@@ -18,6 +18,15 @@
 #include <ifaddrs.h>
 #include <sys/ioctl.h>
 
+#if __APPLE__
+ #include <net/if_dl.h>
+ #include <net/if_types.h>
+ static constexpr ::sa_family_t kFamilyLinkLevel = AF_LINK;
+#elif __linux__
+ #include <linux/if_packet.h>
+ static constexpr ::sa_family_t kFamilyLinkLevel = AF_PACKET;
+#endif
+
 #include "CxxUtilities.hpp"
 #include "NetworkInterface.hpp"
 
@@ -70,7 +79,7 @@ std::vector<NetworkInterface> NetworkInterface::getAllInterfaces() {
         for (auto* intf = intfs.get(); intf != nullptr; intf = intf->ifa_next) {
             auto const family = intf->ifa_addr->sa_family;
 
-            if (family != AF_PACKET && family != AF_INET && family != AF_INET6) {
+            if (family != kFamilyLinkLevel && family != AF_INET && family != AF_INET6) {
                 continue;
             }
 
@@ -102,9 +111,10 @@ NetworkInterface::Type NetworkInterface::getType() const {
                 return Type::loopback;
             }
 
-            has_mac |= (family == AF_PACKET);
+            has_mac |= (family == kFamilyLinkLevel);
 
-            if (family == AF_PACKET || family == AF_INET || family == AF_INET6) {
+           #if __linux__
+            if (family == kFamilyLinkLevel || family == AF_INET || family == AF_INET6) {
                 ::ifreq req = {};
                 std::strcpy(req.ifr_name, intf->ifa_name);
 
@@ -113,6 +123,7 @@ NetworkInterface::Type NetworkInterface::getType() const {
                     return Type::wifi;
                 }
             }
+           #endif
         }
 
         return has_mac ? Type::ethernet : Type::unknown;
@@ -137,7 +148,11 @@ std::optional<NetworkAddress> NetworkInterface::getIPAddress(bool preferIPv6) co
             }
 
             if ((family == AF_INET6 && preferIPv6) || (family == AF_INET && (! preferIPv6))) {
-                return NetworkAddress::fromPOSIXSocketAddress(*intf->ifa_addr);
+                auto retval = NetworkAddress::fromPOSIXSocketAddress(*intf->ifa_addr);
+                
+                if (retval.valid()) {
+                    return retval;
+                }
             }
 
             addr  = NetworkAddress::fromPOSIXSocketAddress(*intf->ifa_addr);
@@ -168,11 +183,15 @@ std::vector<NetworkAddress> NetworkInterface::getAddresses(NetworkAddress::Famil
 
             auto const intf_family = intf->ifa_addr->sa_family;
 
-            if  ((family == NetworkAddress::Family::ethernet && intf_family == AF_PACKET) ||
+            if  ((family == NetworkAddress::Family::ethernet && intf_family == kFamilyLinkLevel) ||
                  (family == NetworkAddress::Family::ipv4 && intf_family == AF_INET) ||
                  (family == NetworkAddress::Family::ipv6 && intf_family == AF_INET6) ||
                  (family == NetworkAddress::Family::unspecified)) {
-                result.emplace_back(NetworkAddress::fromPOSIXSocketAddress(*intf->ifa_addr));
+                auto addr = NetworkAddress::fromPOSIXSocketAddress(*intf->ifa_addr);
+
+                if (addr.valid()) {
+                    result.emplace_back(addr);
+                }
             }
         }
     }
