@@ -83,3 +83,6 @@ if (GTest_FOUND)
   target_link_libraries(cxxnetaddr_test PRIVATE cxxnetaddr GTest::gtest_main)
   gtest_discover_tests(cxxnetaddr_test)
 endif()
+
+add_executable(example example.cpp)
+target_link_libraries(example PRIVATE cxxnetaddr)
