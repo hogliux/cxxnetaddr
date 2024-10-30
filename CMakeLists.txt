@@ -11,6 +11,12 @@
 ##
 cmake_minimum_required(VERSION 3.22)
 
+if (NOT DEFINED PROJECT_NAME)
+ set(CXXNETADDR_ENABLE_TESTS On)
+else()
+ set(CXXNETADDR_ENABLE_TESTS Off)
+endif()
+
 project(cxxnetaddr)
 
 set(CMAKE_CXX_STANDARD 23)
@@ -74,15 +80,23 @@ target_include_directories(cxxnetaddr PRIVATE)
 target_link_libraries(cxxnetaddr PRIVATE)
 
 # Testing
-find_package(GTest)
+if (CXXNETADDR_ENABLE_TESTS)
+ include(CTest)
 
-if (GTest_FOUND)
+ if(BUILD_TESTING)
   enable_testing()
 
-  add_executable(cxxnetaddr_test NetworkAddress_test.cpp NetworkInterface_test.cpp)
-  target_link_libraries(cxxnetaddr_test PRIVATE cxxnetaddr GTest::gtest_main)
-  gtest_discover_tests(cxxnetaddr_test)
-endif()
+  find_package(GTest)
 
-add_executable(example example.cpp)
-target_link_libraries(example PRIVATE cxxnetaddr)
+  if (GTest_FOUND)
+    enable_testing()
+
+    add_executable(cxxnetaddr_test NetworkAddress_test.cpp NetworkInterface_test.cpp)
+    target_link_libraries(cxxnetaddr_test PRIVATE cxxnetaddr GTest::gtest_main)
+    gtest_discover_tests(cxxnetaddr_test)
+  endif()
+
+  add_executable(example example.cpp)
+  target_link_libraries(example PRIVATE cxxnetaddr)
+ endif()
+endif()
