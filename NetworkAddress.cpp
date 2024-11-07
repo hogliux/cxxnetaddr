@@ -16,6 +16,7 @@
 #include <stdexcept>
 #include <iomanip>
 #include <sstream>
+#include <algorithm>
 
 #include <sys/types.h>
 #include <sys/un.h>
