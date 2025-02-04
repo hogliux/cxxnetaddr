@@ -20,7 +20,6 @@ endif()
 project(cxxnetaddr)
 
 set(CMAKE_CXX_STANDARD 23)
-set(CMAKE_CXX_FLAGS_RELEASE -Ofast)
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
