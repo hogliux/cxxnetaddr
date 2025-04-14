@@ -77,6 +77,10 @@ std::vector<NetworkInterface> NetworkInterface::getAllInterfaces() {
         std::vector<NetworkInterface> result;
 
         for (auto* intf = intfs.get(); intf != nullptr; intf = intf->ifa_next) {
+            if (intf->ifa_addr == nullptr) {
+                continue;
+            }
+
             auto const family = intf->ifa_addr->sa_family;
 
             if (family != kFamilyLinkLevel && family != AF_INET && family != AF_INET6) {
@@ -102,6 +106,10 @@ NetworkInterface::Type NetworkInterface::getType() const {
 
         for (auto* intf = intfs.get(); intf != nullptr; intf = intf->ifa_next) {
             if (std::string(intf->ifa_name) != name) {
+                continue;
+            }
+
+            if (intf->ifa_addr == nullptr) {
                 continue;
             }
 
@@ -138,6 +146,10 @@ std::optional<NetworkAddress> NetworkInterface::getIPAddress(bool preferIPv6) co
     if (auto intfs = getifaddrs_wrapper(); intfs != nullptr) {
         for (auto* intf = intfs.get(); intf != nullptr; intf = intf->ifa_next) {
             if (std::string(intf->ifa_name) != name) {
+                continue;
+            }
+
+            if (intf->ifa_addr == nullptr) {
                 continue;
             }
 
@@ -178,6 +190,10 @@ std::vector<NetworkAddress> NetworkInterface::getAddresses(NetworkAddress::Famil
      if (auto intfs = getifaddrs_wrapper(); intfs != nullptr) {
         for (auto* intf = intfs.get(); intf != nullptr; intf = intf->ifa_next) {
             if (std::string(intf->ifa_name) != name) {
+                continue;
+            }
+
+            if (intf->ifa_addr == nullptr) {
                 continue;
             }
 
